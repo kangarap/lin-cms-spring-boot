@@ -10,6 +10,7 @@ import java.util.Date;
 
 /**
  * @author Juzi@TaleLin
+ * 基础数据模型类
  */
 @Data
 public class BaseModel {
@@ -22,7 +23,10 @@ public class BaseModel {
     @JsonIgnore
     private Date updateTime;
 
-    @TableLogic
     @JsonIgnore
     private Date deleteTime;
+
+    @TableLogic
+    @JsonIgnore
+    private Boolean isDeleted;
 }

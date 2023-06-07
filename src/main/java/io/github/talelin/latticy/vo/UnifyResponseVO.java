@@ -10,7 +10,7 @@ import org.springframework.http.HttpStatus;
 
 
 /**
- * 统一API响应结果封装
+ * 统一API响应结果封装视图对象
  *
  * @author pedro@TaleLin
  * @author colorful@TaleLin
@@ -45,7 +45,7 @@ public class UnifyResponseVO<T> {
 
     public UnifyResponseVO(int code, T message) {
         this.code = code;
-        this.message =  message;
+        this.message = message;
         this.request = RequestUtil.getSimpleRequest();
     }
 

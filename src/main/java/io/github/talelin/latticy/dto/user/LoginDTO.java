@@ -8,6 +8,7 @@ import javax.validation.constraints.NotBlank;
 /**
  * @author pedro@TaleLin
  * @author Juzi@TaleLin
+ * 登录数据传输对象
  */
 @Data
 @NoArgsConstructor
@@ -18,4 +19,6 @@ public class LoginDTO {
 
     @NotBlank(message = "{password.new.not-blank}")
     private String password;
+
+    private String captcha;
 }

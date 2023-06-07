@@ -7,6 +7,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 文件上传类的基类
@@ -18,7 +19,7 @@ import java.util.UUID;
  */
 public abstract class AbstractUploader implements Uploader {
 
-    private PreHandler preHandler;
+    private UploadHandler uploadHandler;
 
     @Override
     public List<File> upload(MultiValueMap<String, MultipartFile> fileMap) {
@@ -29,8 +30,8 @@ public abstract class AbstractUploader implements Uploader {
     }
 
     @Override
-    public List<File> upload(MultiValueMap<String, MultipartFile> fileMap, PreHandler preHandler) {
-        this.preHandler = preHandler;
+    public List<File> upload(MultiValueMap<String, MultipartFile> fileMap, UploadHandler uploadHandler) {
+        this.uploadHandler = uploadHandler;
         return this.upload(fileMap);
     }
 
@@ -64,12 +65,16 @@ public abstract class AbstractUploader implements Uploader {
                 extension(ext).
                 build();
         // 如果预处理器不为空，且处理结果为false，直接返回, 否则处理
-        if (preHandler != null && !preHandler.handle(fileData)) {
+        if (uploadHandler != null && !uploadHandler.preHandle(fileData)) {
             return;
         }
         boolean ok = handleOneFile(bytes, newFilename);
         if (ok) {
             res.add(fileData);
+            // 上传到本地或云上成功之后，调用afterHandle
+            if (uploadHandler != null) {
+                uploadHandler.afterHandle(fileData);
+            }
         }
     }
 
@@ -124,7 +129,13 @@ public abstract class AbstractUploader implements Uploader {
             throw new NotFoundException(10026);
         }
         int nums = getFileProperties().getNums();
-        if (fileMap.size() > nums) {
+        AtomicInteger sizes = new AtomicInteger();
+        fileMap.keySet().forEach(key -> fileMap.get(key).forEach(file -> {
+            if (!file.isEmpty()) {
+                sizes.getAndIncrement();
+            }
+        }));
+        if (sizes.get() > nums) {
             throw new FileTooManyException(10121);
         }
     }

@@ -6,25 +6,12 @@ import io.github.talelin.autoconfigure.exception.ForbiddenException;
 import io.github.talelin.autoconfigure.exception.NotFoundException;
 import io.github.talelin.latticy.bo.GroupPermissionBO;
 import io.github.talelin.latticy.common.enumeration.GroupLevelEnum;
-import io.github.talelin.latticy.common.mybatis.Page;
-import io.github.talelin.latticy.dto.admin.DispatchPermissionDTO;
-import io.github.talelin.latticy.dto.admin.DispatchPermissionsDTO;
-import io.github.talelin.latticy.dto.admin.NewGroupDTO;
-import io.github.talelin.latticy.dto.admin.RemovePermissionsDTO;
-import io.github.talelin.latticy.dto.admin.ResetPasswordDTO;
-import io.github.talelin.latticy.dto.admin.UpdateGroupDTO;
-import io.github.talelin.latticy.dto.admin.UpdateUserInfoDTO;
+import io.github.talelin.latticy.common.mybatis.LinPage;
+import io.github.talelin.latticy.dto.admin.*;
 import io.github.talelin.latticy.mapper.GroupPermissionMapper;
-import io.github.talelin.latticy.model.GroupDO;
-import io.github.talelin.latticy.model.GroupPermissionDO;
-import io.github.talelin.latticy.model.PermissionDO;
-import io.github.talelin.latticy.model.UserDO;
-import io.github.talelin.latticy.model.UserIdentityDO;
-import io.github.talelin.latticy.service.AdminService;
-import io.github.talelin.latticy.service.GroupService;
-import io.github.talelin.latticy.service.PermissionService;
-import io.github.talelin.latticy.service.UserIdentityService;
-import io.github.talelin.latticy.service.UserService;
+import io.github.talelin.latticy.mapper.UserGroupMapper;
+import io.github.talelin.latticy.model.*;
+import io.github.talelin.latticy.service.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +26,7 @@ import java.util.stream.Collectors;
  * @author pedro@TaleLin
  * @author colorful@TaleLin
  * @author Juzi@TaleLin
+ * 管理员服务实现类
  */
 @Service
 public class AdminServiceImpl implements AdminService {
@@ -58,9 +46,12 @@ public class AdminServiceImpl implements AdminService {
     @Autowired
     private GroupPermissionMapper groupPermissionMapper;
 
+    @Autowired
+    private UserGroupMapper userGroupMapper;
+
     @Override
     public IPage<UserDO> getUserPageByGroupId(Integer groupId, Integer count, Integer page) {
-        Page<UserDO> pager = new Page<>(page, count);
+        LinPage<UserDO> pager = new LinPage<>(page, count);
         IPage<UserDO> iPage;
         // 如果group_id为空，则以分页的形式返回所有用户
         if (groupId == null) {
@@ -80,7 +71,7 @@ public class AdminServiceImpl implements AdminService {
         return userIdentityService.changePassword(id, dto.getNewPassword());
     }
 
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     @Override
     public boolean deleteUser(Integer id) {
         throwUserNotExistById(id);
@@ -90,7 +81,9 @@ public class AdminServiceImpl implements AdminService {
         boolean userRemoved = userService.removeById(id);
         QueryWrapper<UserIdentityDO> wrapper = new QueryWrapper<>();
         wrapper.lambda().eq(UserIdentityDO::getUserId, id);
-        return userRemoved && userIdentityService.remove(wrapper);
+        // 删除用户，还应当将 user_group表中的数据删除
+        boolean deleteResult = userGroupMapper.deleteByUserId(id) > 0;
+        return userRemoved && userIdentityService.remove(wrapper) && deleteResult;
     }
 
     @Override
@@ -111,8 +104,7 @@ public class AdminServiceImpl implements AdminService {
 
     @Override
     public IPage<GroupDO> getGroupPage(Integer page, Integer count) {
-        IPage<GroupDO> iPage = groupService.getGroupPage(page, count);
-        return iPage;
+        return groupService.getGroupPage(page, count);
     }
 
     @Override
@@ -121,7 +113,7 @@ public class AdminServiceImpl implements AdminService {
         return groupService.getGroupAndPermissions(id);
     }
 
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     @Override
     public boolean createGroup(NewGroupDTO dto) {
         throwGroupNameExist(dto.getName());
@@ -163,7 +155,7 @@ public class AdminServiceImpl implements AdminService {
         }
         throwGroupNotExistById(id);
         List<Integer> groupUserIds = groupService.getGroupUserIds(id);
-        if(groupUserIds.size() > 0) {
+        if(!groupUserIds.isEmpty()) {
             throw new ForbiddenException(10027);
         }
         return groupService.removeById(id);
@@ -193,8 +185,7 @@ public class AdminServiceImpl implements AdminService {
         QueryWrapper<GroupDO> wrapper = new QueryWrapper<>();
         Integer rootGroupId = groupService.getParticularGroupIdByLevel(GroupLevelEnum.ROOT);
         wrapper.lambda().ne(GroupDO::getId, rootGroupId);
-        List<GroupDO> groups = groupService.list(wrapper);
-        return groups;
+        return groupService.list(wrapper);
     }
 
     @Override

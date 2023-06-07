@@ -7,9 +7,13 @@ import io.github.talelin.autoconfigure.exception.FailedException;
 import io.github.talelin.autoconfigure.exception.ForbiddenException;
 import io.github.talelin.autoconfigure.exception.NotFoundException;
 import io.github.talelin.autoconfigure.exception.ParameterException;
+import io.github.talelin.latticy.bo.LoginCaptchaBO;
 import io.github.talelin.latticy.common.LocalUser;
+import io.github.talelin.latticy.common.configuration.LoginCaptchaProperties;
 import io.github.talelin.latticy.common.enumeration.GroupLevelEnum;
-import io.github.talelin.latticy.common.mybatis.Page;
+import io.github.talelin.latticy.common.mybatis.LinPage;
+import io.github.talelin.latticy.common.util.BeanCopyUtil;
+import io.github.talelin.latticy.common.util.CaptchaUtil;
 import io.github.talelin.latticy.dto.user.ChangePasswordDTO;
 import io.github.talelin.latticy.dto.user.RegisterDTO;
 import io.github.talelin.latticy.dto.user.UpdateInfoDTO;
@@ -23,12 +27,16 @@ import io.github.talelin.latticy.service.GroupService;
 import io.github.talelin.latticy.service.PermissionService;
 import io.github.talelin.latticy.service.UserIdentityService;
 import io.github.talelin.latticy.service.UserService;
+import io.github.talelin.latticy.vo.LoginCaptchaVO;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.awt.*;
+import java.io.IOException;
+import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +46,7 @@ import java.util.stream.Collectors;
  * @author pedro@TaleLin
  * @author colorful@TaleLin
  * @author Juzi@TaleLin
+ * 用户服务实现类
  */
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements UserService {
@@ -53,6 +62,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
 
     @Autowired
     private UserGroupMapper userGroupMapper;
+
+    @Autowired
+    private LoginCaptchaProperties captchaConfig;
 
     @Transactional
     @Override
@@ -107,20 +119,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
                 user.setUsername(dto.getUsername());
             }
         }
-
-        // todo 增加工具类实现忽略 null 的 BeanCopy,简化这段代码
-        if (dto.getUsername() != null) {
-            user.setUsername(dto.getUsername());
-        }
-        if (dto.getAvatar() != null) {
-            user.setAvatar(dto.getAvatar());
-        }
-        if (dto.getEmail() != null) {
-            user.setEmail(dto.getEmail());
-        }
-        if (dto.getNickname() != null) {
-            user.setNickname(dto.getNickname());
-        }
+        BeanCopyUtil.copyNonNullProperties(dto, user);
 
         this.baseMapper.updateById(user);
         return user;
@@ -155,7 +154,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
     public List<PermissionDO> getUserPermissions(Integer userId) {
         // 查找用户搜索分组，查找分组下的所有权限
         List<Integer> groupIds = groupService.getUserGroupIdsByUserId(userId);
-        if (groupIds == null || groupIds.size() == 0) {
+        if (groupIds == null || groupIds.isEmpty()) {
             return new ArrayList<>();
         }
         return permissionService.getPermissionByGroupIds(groupIds);
@@ -164,7 +163,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
     @Override
     public List<PermissionDO> getUserPermissionsByModule(Integer userId, String module) {
         List<Integer> groupIds = groupService.getUserGroupIdsByUserId(userId);
-        if (groupIds == null || groupIds.size() == 0) {
+        if (groupIds == null || groupIds.isEmpty()) {
             return new ArrayList<>();
         }
         return permissionService.getPermissionByGroupIdsAndModule(groupIds, module);
@@ -198,7 +197,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
     }
 
     @Override
-    public IPage<UserDO> getUserPageByGroupId(Page<UserDO> pager, Integer groupId) {
+    public IPage<UserDO> getUserPageByGroupId(LinPage<UserDO> pager, Integer groupId) {
         Integer rootGroupId = groupService.getParticularGroupIdByLevel(GroupLevelEnum.ROOT);
         return this.baseMapper.selectPageByGroupId(pager, groupId, rootGroupId);
     }
@@ -213,6 +212,25 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
             userGroupDO = userGroupMapper.selectOne(wrapper);
         }
         return userGroupDO == null ? 0 : userGroupDO.getUserId();
+    }
+
+    @Override
+    public LoginCaptchaVO generateCaptcha() throws IOException, FontFormatException, GeneralSecurityException {
+        String code = CaptchaUtil.getRandomString(CaptchaUtil.RANDOM_STR_NUM);
+        String base64String = CaptchaUtil.getRandomCodeBase64(code);
+        String tag = CaptchaUtil.getTag(code, captchaConfig.getSecret(), captchaConfig.getIv());
+        return new LoginCaptchaVO(tag, "data:image/png;base64," + base64String);
+    }
+
+    @Override
+    public boolean verifyCaptcha(String captcha, String tag) {
+        try {
+            LoginCaptchaBO captchaBO = CaptchaUtil.decodeTag(captchaConfig.getSecret(), captchaConfig.getIv(), tag);
+            return captcha.equalsIgnoreCase(captchaBO.getCaptcha()) || System.currentTimeMillis() > captchaBO.getExpired();
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
+            return false;
+        }
     }
 
     private void checkGroupsExist(List<Integer> ids) {

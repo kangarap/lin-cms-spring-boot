@@ -1,7 +1,7 @@
 package io.github.talelin.latticy.mapper;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import io.github.talelin.latticy.common.mybatis.Page;
+import io.github.talelin.latticy.common.mybatis.LinPage;
 import io.github.talelin.latticy.model.LogDO;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Date;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 
@@ -23,19 +24,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Rollback
 @ActiveProfiles("test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-public class LogMapperTest {
+class LogMapperTest {
 
     @Autowired
     private LogMapper logMapper;
 
     private Date start = new Date();
-    private String permission = "查看lin的信息";
-    private String message = "就是个瓜皮";
-    private String method = "GET";
-    private String path = "/";
-    private Integer statusCode = 200;
-    private Integer userId = 1;
-    private String username = "super";
+    private final String permission = "查看lin的信息";
+    private final String message = "就是个瓜皮";
+    private final String method = "GET";
+    private final String path = "/";
+    private final Integer statusCode = 200;
+    private final Integer userId = 1;
+    private final String username = "super";
 
     @BeforeAll
     public void setUp() throws Exception {
@@ -55,23 +56,23 @@ public class LogMapperTest {
     }
 
     @Test
-    public void testFindLogsByUsernameAndRange() {
+    void testFindLogsByUsernameAndRange() {
         Date now = new Date();
-        Page page = new Page(0, 10);
+        LinPage<LogDO> page = new LinPage<>(0, 10);
         IPage<LogDO> iPage = logMapper.findLogsByUsernameAndRange(page, username, start, now);
         List<LogDO> logs = iPage.getRecords();
         assertTrue(logs.size() > 0);
     }
 
     @Test
-    public void testFindLogsByUsernameAndRange1() {
+    void testFindLogsByUsernameAndRange1() {
         long changed = start.getTime();
         Date ch = new Date(changed - 1000);
         Date ch1 = new Date(changed - 2000);
-        Page page = new Page(1, 10);
+        LinPage<LogDO> page = new LinPage<>(1, 10);
         IPage<LogDO> iPage = logMapper.findLogsByUsernameAndRange(page, username, ch1, ch);
         List<LogDO> logs = iPage.getRecords();
-        assertTrue(logs.size() == 0);
+        assertEquals(0, logs.size());
     }
 
 }
